@@ -90,6 +90,7 @@ int read_file(char *attr_name, char *buf);
 int read_integer_value(char *attr_name);
 int status_report();
 int clear_all();
+int sensors();
 void signal_handler(int sig);
 int convert_to_LSB(long value, char *unit, char *attr);
 char * convert_from_LSB(char * buf, char * attr_name);
@@ -110,6 +111,7 @@ char * description(char *reg);
 
 #define SYSFS_PATH "/sys/bus/i2c/devices/i2c-2/2-0009/hwmon/hwmon4"
 #define usage "Usage: %s <command>\nAccepted commands:\n\tshow\n\tawait\n\twrite file value [measurement unit]\n\tread [-c] file\n\tclear\n\tstatus\n"
+
 
 int main(int argc, char* argv[]){ 
 	signal(SIGINT, signal_handler);
@@ -201,21 +203,12 @@ int await_alerts(){
 			return throw("await_alerts Failure in lseek", -1);
 
 		printf("New data ltc-monitor\n");
-		// TODO magari non usare syscalls?
 		if(ufds[0].revents & POLLPRI){
-			if(read(fds[0], data, 6) > 0){
-				data[5] = '\0';
-				printf("[ltc-monitor] Alarm value: %s\n", data);
-			}
-			else
+			if(read(fds[0], data, 6) <= 0)
 				return throw("await_alerts: Error in reading alarm register", errno);
 		}
 		if(ufds[1].revents & POLLPRI){
-			if(read(fds[1], data, 6) > 0) {
-				data[5] = '\0';
-				printf("[ltc-monitor] Monitor value: %s\n", data);
-			}
-			else
+			if(read(fds[1], data, 6) <= 0)
 				return throw("await_alerts: Error in reading monitor status", errno);
 		}
 		status_report();
@@ -608,8 +601,22 @@ int status_report(void)
 	printf("ALARMS:\n");
 	
 
-	log_alarm(alarms, ALARM_CAP_UV, "Capacitor undervoltage alarm", "meas_cap", "cap_uv_lvl", "meas_cap", "Capacitor Undervoltage Level");
-	log_alarm(alarms, ALARM_CAP_OV, "Capacitor overvoltage alarm", "meas_cap", "cap_ov_lvl", "meas_cap", "Capacitor Overvoltage Level");
+	// lavora di più su questo
+	if(alarms & ALARM_CAP_UV || alarms & ALARM_CAP_OV) {
+		int lvl, cap1, cap2, cap3, cap4;
+		if(alarms & ALARM_CAP_UV) {
+			printf("%s\n", "Capacitor undervoltage alarm");
+			lvl = read_integer_value("cap_uv_lvl");
+		} else {
+			printf("%s\n", "Capacitor overvoltage alarm");
+			lvl = read_integer_value("cap_ov_lvl");
+		}
+		cap1 = read_integer_value("meas_vcap1");
+		cap2 = read_integer_value("meas_vcap2");
+		cap3 = read_integer_value("meas_vcap3");
+		cap4 = read_integer_value("meas_vcap4");
+		printf("Alarm level: %d. vcap1: %d. vcap2: %d. vcap3: %d. vcap4: %d.\n", lvl, cap1, cap2, cap3, cap4);
+	}
 	log_alarm(alarms, ALARM_GPI_UV, "General purpose Undervoltage alarm", "meas_gpi", "gpi_uv_lvl", "Measured GPI pin voltage", "General Purpose Input Undervoltage Level");
 	log_alarm(alarms, ALARM_GPI_OV, "General purpose Overvoltage alarm", "meas_gpi", "gpi_ov_lvl", "Measured GPI pin voltage", "General Purpose Input Overvoltage Level");
 	log_alarm(alarms, ALARM_VIN_UV, "Input Undervoltage alarm", "meas_vin", "vin_uv_lvl", "Measured VIN voltage", "General Purpose Input Undervoltage Level");
@@ -656,6 +663,57 @@ static void log_alarm(int alarms, int alarm_num, char *alarm_desc, char *reg1, c
 	}
 }
 
+/**
+int sensors(){
+	DIR *dir;
+	struct dirent *entry;
+	int i = 0;
+
+	//open directory
+	dir = opendir(SYSFS_PATH);
+	if(dir == NULL)
+		return throw("Error in opening directory", errno);
+
+	while ((entry = readdir(dir)) != NULL) {
+		char full_path[PATH_MAX];
+		char buf[16];
+		char meas_name[16];
+		char meas_conv[16];
+		char max_name[16];
+		char min_name[16];
+		char max[16];
+		char min[16];
+		
+		if(!starts_with(entry->d_name, "meas")) {
+			continue;
+		}
+
+		snprintf(full_path, sizeof(full_path), "%s/%s", SYSFS_PATH, entry->d_name);
+		
+		if (read_file(entry->d_name, buf))
+			continue;
+		
+		meas_name = entry->d_name + 5;
+		meas_conv = convert_from_LSB(buf, entry->d_name);
+		printf("meas_name : %s\n");
+
+		else if(starts_with(meas_name, "vcap") && strcmp(meas_name, "vcap")) {
+			min_name = "cap_uv_lvl";
+			max_name = "cap_ov_lvl";
+		}
+		else if(starts_with(meas_name, "dtemp")) {
+			min_name = "dtemp_cold_lvl";
+			max_name = "dtemp_hot_lvl";
+		}
+		else {
+			snprintf(min_name, sizeof(max_name), "%s_uv_lvl", meas_name);
+			snprintf(max_name, sizeof(min_name), "%s_ov_lvl", meas_name);
+		}
+		printf("%s: %s. (max: min:)\n");
+	}
+	return 0;
+}
+*/
 
 
 
