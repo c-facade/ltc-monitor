@@ -41,4 +41,5 @@ Print a complete status report, that includes monitor status, active alarms, and
 Include the ltc-monitor folder in your yocto project, and compile the `ltc-monitor` recipe. This will generate a binary file called "ltc-monitor". Copy and paste it in a executables folder (such as `/usr/bin`) of the target device.
 The target device needs to have the ltc3350 driver, either as a module or as built-in.
 
-
+## ltcsensors
+`ltcsensors.py` is a python script that allows the user to read sensors values in real time and store them in a csv file. It's completely separate from ltc-monitor but I uploaded it to have another example of uses for the ltc3350 driver. See its [README](ltcsensors/README.md).
